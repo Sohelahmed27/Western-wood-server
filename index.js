@@ -28,15 +28,7 @@ const verifyJWT =(req, res, next) => {
 }
 
  // Warning: use verifyJWT before using verifyAdmin
- const verifyAdmin = async (req, res, next) => {
-  const email = req.decoded.email;
-  const query = { email: email }
-  const user = await usersCollection.findOne(query);
-  if (user?.role !== 'admin') {
-    return res.status(403).send({ error: true, message: 'forbidden message' });
-  }
-  next();
-}
+ 
 
 const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
 const uri = `mongodb+srv://${process.env.DB_user}:${process.env.DB_password}@cluster0.fbfgu.mongodb.net/?retryWrites=true&w=majority`;
@@ -58,7 +50,16 @@ async function run() {
 
     const reviewCollection = client.db("westDB").collection("reviews");
     const cartCollection = client.db("westDB").collection("carts");
-
+    
+    const verifyAdmin = async (req, res, next) => {
+      const email = req.decoded.email;
+      const query = { email: email }
+      const user = await usersCollection.findOne(query);
+      if (user?.role !== 'admin') {
+        return res.status(403).send({ error: true, message: 'forbidden message' });
+      }
+      next();
+    }
 
    app.patch('/users/admin/:id', async(req, res) => {
      const id = req.params.id;
@@ -74,7 +75,7 @@ async function run() {
    })
 
     //users related apis
-    app.get('/users', verifyJWT, async(req, res) => {
+    app.get('/users', verifyJWT, verifyAdmin, async(req, res) => {
       const result = await usersCollection.find().toArray();
       res.send(result);
     })
@@ -103,9 +104,9 @@ async function run() {
 
 
     //verify admin
-    const verifyAdmin = async (req, res, next) => {
-      const email = req.decoded.email;
-    }
+    // const verifyAdmin = async (req, res, next) => {
+    //   const email = req.decoded.email;
+    // }
 
     app.get('/user/admin/:email',  verifyJWT,  async(req, res) => {
       const email = req.params.email;
@@ -122,22 +123,7 @@ async function run() {
 
 
    //cart collections
-  //  app.get('/carts', async(req, res)=>{
-  //   const email = req.query.email;
-  //   console.log(email)
-  //   if (!email){
-  //     res.send ([])
-  //   }
-
-  //   const decodedEmail = req.decoded.email;
-  //   if(email !==decodedEmail){
-  //    return  res.status(401).send({error:true, message:'Forbidden access'})
-  //   }
-  //   const query = {email: email}
-  //   const result = await cartCollection.find(query).toArray();
-  //   res.send(result)
-  //  })
-
+ 
   app.get('/carts',verifyJWT, async (req, res) => {
     const email = req.query.email;
 
@@ -156,37 +142,7 @@ async function run() {
   });
 
 
-  //.......................test.......................................
-
-  // app.get('/carts', async (req, res) => {
-  //   const email = req.query.email;
-  //   const user = req.body;
-  
-  //   if (!email) {
-  //     res.send([]);
-  //   }
-  
-  //   const token = jwt.sign(user, process.env.ACCESS_token_SECRET, { expiresIn: '1h' })
-  
-  //   if (!token) {
-  //     return res.status(401).send({ error: true, message: 'Unauthorized' });
-  //   }
-  
-  //   try {
-  //     const decoded = jwt.verify(token, process.env.ACCESS_token_SECRET,); 
-  //     const decodedEmail = decoded.email;
-  
-  //     if (email !== decodedEmail) {
-  //       return res.status(403).send({ error: true, message: 'Forbidden access' });
-  //     }
-  
-  //     const query = { email: email };
-  //     const result = await cartCollection.find(query).toArray();
-  //     res.send(result);
-  //   } catch (error) {
-  //     return res.status(401).send({ error: true, message: 'Invalid token' });
-  //   }
-  // });
+ 
 
     app.post('/carts', async (req, res) => {
       const item = req.body;
@@ -203,6 +159,13 @@ async function run() {
 
     app.get('/review', async (req, res) => {
       const result =await reviewCollection.find().toArray();
+      res.send(result);
+    })
+
+    //send image
+    app.post('/menu', verifyJWT, verifyAdmin, async(req, res) => {
+      const newItem = req.body;
+      const result = await menuCollection.insertOne(newItem);
       res.send(result);
     })
 
