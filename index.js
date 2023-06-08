@@ -1,6 +1,7 @@
 const express = require("express");
 const jwt = require('jsonwebtoken');
 const cors = require("cors");
+const stripe = require('stripe')(process.env.PAYMENT_SECRET_KEY)
 require("dotenv").config();
 const app = express();
 const port = process.env.PORT || 5000;
@@ -17,7 +18,8 @@ const verifyJWT =(req, res, next) => {
   }
 
 //bearer token
-  const token = authorization.split(' ')[1]
+const token = authorization.split(' ')[1];
+
   jwt.verify(token, process.env.ACCESS_token_SECRET, (err, decoded)=>{
     if(err){
       res.status(401).send({error:true, message:'Unauthorized access'})
@@ -27,7 +29,17 @@ const verifyJWT =(req, res, next) => {
   });
 }
 
- // Warning: use verifyJWT before using verifyAdmin
+    // Warning: use verifyJWT before using verifyAdmin
+    const verifyAdmin = async (req, res, next) => {
+      const email = req.decoded.email;
+      const query = { email: email }
+      const user = await usersCollection.findOne(query);
+      if (user?.role !== 'admin') {
+        return res.status(403).send({ error: true, message: 'forbidden message' });
+      }
+      next();
+    }
+
  
 
 const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
@@ -50,6 +62,7 @@ async function run() {
 
     const reviewCollection = client.db("westDB").collection("reviews");
     const cartCollection = client.db("westDB").collection("carts");
+    const paymentCollection = client.db("westDB").collection("payments");
     
     const verifyAdmin = async (req, res, next) => {
       const email = req.decoded.email;
@@ -101,12 +114,6 @@ async function run() {
 
     })
 
-
-
-    //verify admin
-    // const verifyAdmin = async (req, res, next) => {
-    //   const email = req.decoded.email;
-    // }
 
     app.get('/user/admin/:email',  verifyJWT,  async(req, res) => {
       const email = req.params.email;
@@ -169,6 +176,15 @@ async function run() {
       res.send(result);
     })
 
+    // delete menu item api
+
+    app.delete('/menu/:id', verifyJWT, verifyAdmin, async(req, res) => {
+      const id = req.params.id;
+      const query = {_id: new ObjectId(id)}
+      const result = await menuCollection.deleteOne(query)
+      res.send(result);
+    })
+
     //delete item
     app.delete('/carts/:id', async (req, res) => {
       const id = req.params.id;
@@ -176,6 +192,39 @@ async function run() {
       const result = await cartCollection.deleteOne(query);
       res.send(result);
     })
+
+   //payment related api
+
+   app.post('/payment', async (req, res)=> {
+    const payment = req.body;
+    const insertResult = await paymentCollection.insertOne(payment);
+
+    const query = { _id: {$in:payment.cartItems.map(id=> new ObjectId(insertResult))}}
+    const deleteResult = await cartCollection.deleteMany(query);
+    res.send({insertResult, deleteResult})
+   })
+
+      // create payment intent
+      app.post('/create-payment-intent', verifyJWT, async (req, res) => {
+        const { price } = req.body;
+        
+        const amount = parseInt(price * 100);
+        console.log(price, amount);
+        const paymentIntent = await stripe.paymentIntents.create({
+          amount: amount,
+          currency: 'usd',
+          payment_method_types: ['card']
+        });
+        res.send({
+          clientSecret: paymentIntent.client_secret
+        })
+      })
+
+      app.post('/payments', verifyJWT, async (req, res) => {
+        const payment = req.body;
+        const result = await paymentCollection.insertOne(payment);
+        res.send(result);
+      })
 
     // await client.connect();
     // Send a ping to confirm a successful connection
