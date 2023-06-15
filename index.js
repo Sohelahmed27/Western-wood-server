@@ -1,8 +1,10 @@
 const express = require("express");
+require("dotenv").config();
+const nodemailer = require("nodemailer");
 const jwt = require('jsonwebtoken');
 const cors = require("cors");
 const stripe = require('stripe')(process.env.PAYMENT_SECRET_KEY)
-require("dotenv").config();
+
 const app = express();
 const port = process.env.PORT || 5000;
 
@@ -10,6 +12,12 @@ const port = process.env.PORT || 5000;
 
 app.use(cors());
 app.use(express.json());
+
+//Send email conformation
+const sendPaymentConformationEmail = payment => {
+
+
+}
 
 const verifyJWT =(req, res, next) => {
   const authorization = req.headers.authorization;
@@ -133,9 +141,9 @@ async function run() {
  
   app.get('/carts',verifyJWT, async (req, res) => {
     const email = req.query.email;
-
+  console.log(req.decoded)
     if (!email) {
-      res.send([]);
+     return  res.send([]);
     }
 
     const decodedEmail = req.decoded.email;
@@ -195,14 +203,7 @@ async function run() {
 
    //payment related api
 
-   app.post('/payment', async (req, res)=> {
-    const payment = req.body;
-    const insertResult = await paymentCollection.insertOne(payment);
-
-    const query = { _id: {$in:payment.cartItems.map(id=> new ObjectId(insertResult))}}
-    const deleteResult = await cartCollection.deleteMany(query);
-    res.send({insertResult, deleteResult})
-   })
+ 
 
       // create payment intent
       app.post('/create-payment-intent', verifyJWT, async (req, res) => {
@@ -212,13 +213,38 @@ async function run() {
         console.log(price, amount);
         const paymentIntent = await stripe.paymentIntents.create({
           amount: amount,
-          currency: 'usd',
-          payment_method_types: ['card']
+      currency: 'inr',
+      payment_method_types: ['card'],
+      metadata: {
+        customer_name: 'customerName',
+        customer_email: 'customerEmail',
+      },
+      shipping: {
+        name: "customerName",
+        address: {
+          line1: 'Street Address',
+          city: 'City',
+          state: 'State',
+          postal_code: 'Postal Code',
+          country: 'IN',
+        },
+      },
         });
         res.send({
           clientSecret: paymentIntent.client_secret
         })
       })
+
+      app.post('/payment', async (req, res)=> {
+        const payment = req.body;
+        const insertResult = await paymentCollection.insertOne(payment);
+    
+        const query = { _id: {$in:payment.cartItems.map(id=> new ObjectId(id))}}
+        const deleteResult = await cartCollection.deleteMany(query);
+    
+        console.log(payment)
+        res.send({insertResult, deleteResult})
+       })
 
       app.post('/payments', verifyJWT, async (req, res) => {
         const payment = req.body;
